@@ -2,6 +2,7 @@ from airflow.decorators import dag, task
 import pendulum
 import requests
 import xmltodict
+import os
 
 from airflow.providers.sqlite.operators.sqlite import SqliteOperator
 from airflow.providers.sqlite.hooks.sqlite import SqliteHook
@@ -58,5 +59,26 @@ def podcast_summary():
         return new_episodes
 
     new_episodes = load_episodes(podcast_episodes)
+
+    @task()
+    def download_episodes(episodes):
+        audio_files = []
+        for episode in episodes:
+            name_end = episode["link"].split('/')[-1]
+            filename = f"{name_end}.mp3"
+            audio_path = os.path.join(EPISODE_FOLDER, filename)
+            if not os.path.exists(audio_path):
+                print(f"Downloading {filename}")
+                # download the audio file
+                audio = requests.get(episode["enclosure"]["@url"])
+                with open(audio_path, "wb+") as f:
+                    f.write(audio.content)
+            audio_files.append({
+                "link": episode["link"],
+                "filename": filename
+            })
+        return audio_files
+
+    audio_files = download_episodes(podcast_episodes)
 
 podcast_summary_dag = podcast_summary()
